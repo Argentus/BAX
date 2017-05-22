@@ -11,7 +11,8 @@
  ** possible extent, into the public domain.
  **
  **/
-
+#ifndef BAXI_H
+#define BAXI_H
 
 #include <stdint.h>
 
@@ -55,20 +56,36 @@ typedef enum {
 	BAX_NONE = 0,
 
 	// Commands
-	BAX_CMD_LST = 1,
-	BAX_CMD_CAL,
-	BAX_CMD_LET,
+	BAX_CMD_NON = 1,
+	BAX_CMD_DON,
+	BAX_CMD_DO,
+	BAX_CMD_ELS,
+	BAX_CMD_EXE,
 	BAX_CMD_IF,
-	BAX_CMD_JMP,
-	BAX_CMD_SUB,
-	BAX_CMD_RTN,
-	BAX_CMD_OUT,
+	BAX_CMD_INN,
 	BAX_CMD_IN,
+	BAX_CMD_JMP,
+	BAX_CMD_LET,
+	BAX_CMD_OPN,
+	BAX_CMD_OUT,
+	BAX_CMD_PRT,
+	BAX_CMD_RDN,
+	BAX_CMD_RD,
 	BAX_CMD_REQ,
+	BAX_CMD_RTN,
+	BAX_CMD_SUB,
+	BAX_CMD_TON,
+	BAX_CMD_TOS,
+	BAX_CMD_VAL,
+	BAX_CMD_VAR,
+	BAX_CMD_XIT,
+	BAX_CMD_LAST,
 
 	// Constants
 	BAX_INT8 = 70,
 	BAX_INT16,
+	BAX_INT32,
+	BAX_INT64,
 	BAX_CHAR,
 	BAX_TRUE,
 	BAX_FALSE,
@@ -106,18 +123,23 @@ typedef enum {
 	// Memory
 	BAX_MEM_8 = 120,
 	BAX_MEM_16,
+	BAX_MEM_32,
+	BAX_MEM_64,
+	BAX_MEM_STR,
 
 	// Math operators
 	//    Additive
 	BAX_M_PLUS = 130,
 	BAX_M_MINUS,
-	//    Multiplicative
+	// Multiplicative
 	BAX_M_MUL = 140,
 	BAX_M_DIV,
 	BAX_M_MOD,
 	BAX_M_AND,
 	BAX_M_OR,
 	BAX_M_XOR,
+	// Unary
+	BAX_M_NEGATIVE,
 
 	// Comparison operators
 	BAX_C_EQUAL = 150,
@@ -132,20 +154,37 @@ typedef enum {
 	BAX_L_EQUIV,
 	BAX_L_NOT,
 
+	// Source code components
+	BAX_SRC_HEX_CONST = 200,
+	BAX_SRC_BIN_CONST,
+	BAX_SRC_DEC_CONST,
+	BAX_SRC_CHAR_CONST,
+
 	// Symbols
-	BAX_CHAR_LPAR = 220,
-	BAX_CHAR_RPAR,
+	BAX_SRC_LPAR = 220,
+	BAX_SRC_RPAR,
+	BAX_SRC_LSQPAR,
+	BAX_SRC_RSQPAR,
 
 	// Program end
 	BAX_END = 255
 	
 } BAX_TOKEN;
 
+typedef struct BAX_src_token {
+	BAX_TOKEN type;
+	char * string;
+	uint8_t len;
+} BAX_src_token;
+
 /*
  * Compiler fsunctions
  */
-int8_t BAX_translate_var (char * sourceLine, uint8_t * byteCode, uint8_t * i);
-int8_t BAX_translate_term (char * sourceLine, uint8_t * byteCode, uint8_t * i);
-int8_t BAX_translate_expression (char * sourceLine, uint8_t * byteCode, uint8_t * i);
-int8_t BAX_translate_factor (char * sourceLine, uint8_t * byteCode, uint8_t * i);
+int8_t BAX_translate_term (BAX_src_token * sourceLine, uint8_t * byteCode, uint8_t * i);
+int8_t BAX_translate_expression (BAX_src_token * sourceLine, uint8_t * byteCode, uint8_t * i);
+int8_t BAX_translate_factor (BAX_src_token * sourceLine, uint8_t * byteCode, uint8_t * i);
 int8_t BAX_translate_condition (char * sourceLine, uint8_t * byteCode, uint8_t * i);
+int8_t BAX_translate_log_term (BAX_src_token * sourceLine, uint8_t * byteCode, uint8_t * i);
+int8_t BAX_translate_log_expression (BAX_src_token * sourceLine, uint8_t * byteCode, uint8_t * i);
+
+#endif //BAXI_H
