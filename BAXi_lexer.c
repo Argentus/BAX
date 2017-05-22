@@ -327,6 +327,10 @@ BAX_src_token BAX_next_token(char * source, uint8_t * i)
 				else
 					tok.type = BAX_NONE;
 				break;
+			case '#':
+				while (source[j] != '\0' && source[j] != '\n')
+					++j;
+					tok.type = BAX_SRC_COMMENT;
 			default:
 				tok.type = BAX_NONE;
 				break;

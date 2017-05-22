@@ -560,6 +560,9 @@ int8_t BAX_translate_line (BAX_src_token * sourceLine, uint8_t * byteCode) {
 		case BAX_CMD_VAR:
 			byteCode_len = -2;
 			break;
+		case BAX_SRC_COMMENT:
+			byteCode_len = 0;
+			break;
 		default:
 			return -1;
 			break;
