@@ -142,7 +142,11 @@ BAX_TOKEN BAX_get_command(char * source, uint8_t * i)
 			break;
 		case 's':
 		case 'S':
-			if ((source[j+1] == 'U' && source[j+1] == 'u') && (source[j+2] == 'B' || source[j+2] == 'b')) {
+			if ((source[j+1] == 'L' || source[j+1] == 'l') && (source[j+2] == 'P' || source[j+2] == 'p')) {
+				ret = BAX_CMD_SLP;
+				*i = j + 3;
+			}
+			if ((source[j+1] == 'U' || source[j+1] == 'u') && (source[j+2] == 'B' || source[j+2] == 'b')) {
 				ret = BAX_CMD_SUB;
 				*i = j + 3;
 			}
@@ -330,7 +334,13 @@ BAX_src_token BAX_next_token(char * source, uint8_t * i)
 			case '#':
 				while (source[j] != '\0' && source[j] != '\n')
 					++j;
-					tok.type = BAX_SRC_COMMENT;
+				tok.type = BAX_SRC_COMMENT;
+				break;
+			case ':':
+				while (source[j] != '\0' && source[j] != '\n' && !isWhitespace(source[j]))
+					++j;
+				tok.type = BAX_SRC_LABEL;
+				break;
 			default:
 				tok.type = BAX_NONE;
 				break;

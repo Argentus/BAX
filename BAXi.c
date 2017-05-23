@@ -16,6 +16,8 @@
 #include "BAXi_lexer.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 /* -----------------
  * function: BAX_translate_factor
@@ -458,6 +460,7 @@ int8_t BAX_translate_line (BAX_src_token * sourceLine, uint8_t * byteCode) {
 		case BAX_CMD_DO:
 		case BAX_CMD_ELS:
 		case BAX_CMD_RTN:
+		case BAX_CMD_SLP:	// Temporary, will accept duration later
 		case BAX_CMD_XIT:
 			byteCode_buffer[0] = (uint8_t) sourceLine[i].type;
 			byteCode_len = 1;
@@ -485,7 +488,9 @@ int8_t BAX_translate_line (BAX_src_token * sourceLine, uint8_t * byteCode) {
 			byteCode_len = -2;
 			break;
 		case BAX_CMD_JMP:
-			byteCode_len = -2;
+			// JMP <label>
+			byteCode_buffer[0] = (uint8_t) BAX_CMD_JMP;
+			byteCode_len = 3;
 			break;
 		case BAX_CMD_LET:
 			// LET <variable> = <expression>
@@ -527,14 +532,22 @@ int8_t BAX_translate_line (BAX_src_token * sourceLine, uint8_t * byteCode) {
 			byteCode_buffer[0] = (uint8_t) BAX_CMD_PRT;
 			byteCode_len = 1;
 			++i;
-
-			// Get expression to be printed
-			ret = BAX_translate_expression(sourceLine, byteCode_buffer + byteCode_len, &i);
-			if (ret <= 0) {
-				byteCode_len = ret;
-				break;
-			} else
-				byteCode_len += ret;
+			
+			// Is it a string?
+			if (sourceLine[i].type == BAX_STRING) {
+				byteCode_buffer[1] = (uint8_t) BAX_STRING;
+				byteCode_buffer[2] = sourceLine[i].len - 2;	// -2 for parentheses
+				uint8_t j;
+				for (j = 0; j < byteCode_buffer[2]; j++) {
+					byteCode_buffer[3 + j] = sourceLine[i].string[j+1];
+				}
+				byteCode_len += byteCode_buffer[2] + 2;
+			} else {
+				if (sourceLine[i].type >= BAX_VAR_A && sourceLine[i].type <= BAX_VAR_Z) {
+					byteCode_buffer[1] = (uint8_t) sourceLine[i].type;
+					byteCode_len += 1;
+				}
+			}
 			break;
 		case BAX_CMD_RDN:
 			byteCode_len = -2;
@@ -561,6 +574,7 @@ int8_t BAX_translate_line (BAX_src_token * sourceLine, uint8_t * byteCode) {
 			byteCode_len = -2;
 			break;
 		case BAX_SRC_COMMENT:
+		case BAX_SRC_LABEL:
 			byteCode_len = 0;
 			break;
 		default:
@@ -581,88 +595,240 @@ int8_t BAX_translate_line (BAX_src_token * sourceLine, uint8_t * byteCode) {
  * Testing
  */
 #include <stdio.h>
-
+int16_t process_labels(BAX_env * env, char * source);
 int16_t eval_expr(BAX_env * env, uint8_t * byteCode, uint8_t * i);
 int16_t eval_cond(BAX_env * env, uint8_t * byteCode, uint8_t * i);
-uint8_t interpret_line(BAX_env * env, uint8_t * byteCode, uint8_t * i);
+int8_t interpret_line(BAX_env * env, uint8_t * byteCode);
+int8_t compile_program(char * source, uint8_t ** output);
 
-int main () {
-	uint8_t byteCode[256];
-	char input[256];
-	uint8_t i;
-	int8_t ret;
-	BAX_env env;
+int8_t compile_program(char * source, uint8_t ** output) {
 	
-	do {
-		for (i=0; i<254; i++)
-			byteCode[i] = 0;
+	char * lines[32000];
+	int nLines = 0;
+	lines[nLines] = source;
+	int j = 0;
+	struct labelInfo {
+		char * label;
+		uint8_t len;
+		uint16_t where;
+	};
+	struct jumpToBeResolved {
+		char * label;
+		uint8_t len;
+		uint8_t * where;
+	};
 
-		printf("> ");
-		i = -1;
-		while (input[i++] != '\n') {
-			input[i] = getchar();
+	struct labelInfo labels[1000];
+	struct jumpToBeResolved jumps[16000];
+	int nLabels = 0;
+	int nJumps = 0;
+
+	uint8_t * byteCode = malloc(32000 * sizeof(uint8_t));
+	if (byteCode == NULL) {
+		printf("Malloc failed!\n");
+		return -1;
+	}
+	int byteCodeIterator = 0;
+	int i;
+	for (i = 0; i < 32000; i++)
+		byteCode[i] = 0;
+
+	while(source[j] != '\0') {
+		if (source[j] == '\n') {
+			source[j] = '\0';
+			lines[++nLines] = source + j + 1;
 		}
-		input[i] = '\0';
-		BAX_src_token tokens[256];
-		int8_t tokc = BAX_tokenize(input, tokens);
-		if (tokc < 0) {
-			printf("Lexical error!\n");
+		j++;
+			
+	}
+	++nLines;
+
+	for (j = 0; j < nLines; j++) {
+		BAX_src_token tokenized[255];
+		int8_t tokc = BAX_tokenize(lines[j], tokenized);
+		tokc = tokc; // Shut up, compiler
+
+		uint8_t lineByteCode[255];
+		for (i = 0; i < 254; i++)
+			lineByteCode[i] = 0;
+
+		// Is it a label?
+		if (tokenized[0].type == BAX_SRC_LABEL) {
+			labels[nLabels].label = tokenized[0].string;
+			labels[nLabels].len = tokenized[0].len;
+			labels[nLabels].where = byteCodeIterator;
+			++nLabels;
 			continue;
 		}
-		int8_t len = BAX_translate_line(tokens, byteCode);
+
+		int8_t len = BAX_translate_line(tokenized, lineByteCode);
 		if (len < 0) {
-			printf("Syntax error!\n");
-			continue;
+			printf("Syntax error on line %i!\n", j);
+			return -1;
 		} else if (len == 0) {
 			continue;
 		}
 
-		uint8_t ind = 0;
-		ret = interpret_line(&env, byteCode, &ind);
+		if (lineByteCode[0] == BAX_CMD_JMP) {
+			jumps[nJumps].label = tokenized[1].string;
+			jumps[nJumps].len = tokenized[1].len;
+			jumps[nJumps].where = byteCode + byteCodeIterator + 1;
+			++nJumps;
+		}
+
+		// Copy to main
+		for (i = 0; i < len; i++) {
+			byteCode[byteCodeIterator + i] = lineByteCode[i];
+		}
+		byteCodeIterator += len;
+
+	}
+
+	int k;
+	// Resolve jumps
+	for (j = 0; j < nJumps; j++) {
+		char resolved = 0;
+		for (i = 0; i < nLabels; i++) {
+			if (jumps[j].len == labels[i].len) {
+				for (k = 0; k < labels[i].len; k++) {
+					if (jumps[j].label[k] != labels[i].label[k])
+						break;
+					}
+				// Found the right label
+				*((uint16_t *) jumps[j].where) = labels[i].where;
+				resolved = 1;
+				break;
+			}
+		}
+		if (!resolved) {
+			printf("Unknown label used: %10s !\n", jumps[j].label);
+			return -1;
+		}
+	}
+
+	byteCode = realloc(byteCode, byteCodeIterator * sizeof(uint8_t));
+	if (byteCode == NULL) {
+		printf("Realloc failed!\n");
+		return -1;
+	}
+	
+	*output = byteCode;
+	return byteCodeIterator;
+};
+
+int main () {
+	uint8_t * byteCode;
+	char input[100000];
+	int i;
+	int ret;
+	BAX_env env;
+	env.IP = 0;
+	env.condition = BAX_CONDITION_NSET;
+	
+	for (i=0; i<100000; i++)
+		input[i] = 0;
+
+	i = -1;
+	do {
+		input[++i] = getchar();
+	} while (input[i] != EOF && input[i] != '\0');
+	input[i] = '\0';
+
+	int len = compile_program(input, &byteCode);
+	if (len < 0) {
+		return -1;
+	} else if (len == 0) {
+		return 0;
+	}
+
+	do {
+		ret = interpret_line(&env, byteCode);
 	} while (ret != -1);
 	return 0;
 }
 
-uint8_t interpret_line(BAX_env * env, uint8_t * byteCode, uint8_t * i) {
-
-	switch (byteCode[*i]) {
+int8_t interpret_line(BAX_env * env, uint8_t * byteCode) {
+	switch (byteCode[env->IP]) {
 		case BAX_NONE:
 			return -1;
 		case BAX_CMD_IF:
 			{
-			*i += 1;
-			int16_t result = eval_cond(env, byteCode, i);
+			env->IP += 1;
+			uint8_t i = 0;
+			int16_t result = eval_cond(env, byteCode+(env->IP), &i);
+			env->IP += i;
+			if (env->condition != BAX_CONDITION_FAILED)
+				env->condition = result == 1 ? BAX_CONDITION_MET : BAX_CONDITION_FAILED_NEW;
+			}
+			break;
 
-			printf("%s\n", result == 1 ? "true" : "false");
+		case BAX_CMD_JMP:
+			{
+			if (env->condition != BAX_CONDITION_FAILED) {
+				env->IP += 1;
+				uint16_t dest = *((uint16_t *) (byteCode+(env->IP)));
+				env->IP += 2;
+				env->IP = dest;
+			} else {
+				env->IP += 3;
+			}
 			}
 			break;
 
 		case BAX_CMD_LET:
 			{
-			BAX_TOKEN var = (BAX_TOKEN) byteCode[*i+1];
+			env->IP += 1;
+			BAX_TOKEN var = (BAX_TOKEN) byteCode[env->IP];
 			if (var < BAX_VAR_A || var > BAX_VAR_Z)
 				return -1;
-			*i += 2;
-			int16_t result = eval_expr(env, byteCode, i);
-
-			env->vars[var - BAX_VAR_A] = result;
+			env->IP += 1;
+			uint8_t i = 0;
+			int16_t result = eval_expr(env, byteCode+(env->IP), &i);
+			env->IP += i;
+			if (env->condition != BAX_CONDITION_FAILED)
+				env->vars[var - BAX_VAR_A] = result;
 			}
 			break;
 
 		case BAX_CMD_PRT:
 			{
-			BAX_TOKEN var = (BAX_TOKEN) byteCode[*i+1];
-			if (var < BAX_VAR_A || var > BAX_VAR_Z)
-				return -1;
-			*i += 2;
+			BAX_TOKEN var = (BAX_TOKEN) byteCode[(env->IP)+1];
+			if (var == BAX_STRING) {
+				if (env->condition != BAX_CONDITION_FAILED) {
+					uint8_t j;
+					for (j = 0; j < byteCode[(env->IP)+2]; j++) {
+						putchar(byteCode[(env->IP)+3+j]);
+					}
+					putchar('\n');
+				}
+				(env->IP) += 3 + byteCode[(env->IP)+2];
+			} else {
+				if (var < BAX_VAR_A || var > BAX_VAR_Z)
+					return -1;
+				(env->IP) += 2;
 
-			printf("%i\n", env->vars[var - BAX_VAR_A]);
+				if (env->condition != BAX_CONDITION_FAILED)
+					printf("%i\n", env->vars[var - BAX_VAR_A]);
+				}
+			}
+			break;
+
+		case BAX_CMD_SLP:
+			{
+				(env->IP)++;
+				if (env->condition != BAX_CONDITION_FAILED) {
+					sleep(1);
+				}
 			}
 			break;
 
 		default:
 			return -1;
 	}
+	if (env->condition == BAX_CONDITION_FAILED)
+		env->condition = BAX_CONDITION_FAILED_OLD;
+	else if (env->condition == BAX_CONDITION_FAILED_NEW)
+		env->condition = BAX_CONDITION_FAILED;
 	return 0;
 }
 

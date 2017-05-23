@@ -41,6 +41,7 @@ typedef struct BAX_env {
 
 	// Instruction pointer
 	uint16_t IP;
+	uint8_t condition;
 
 	// Return addresses
 	uint16_t retAddr[MAX_SUBS];
@@ -50,6 +51,15 @@ typedef struct BAX_env {
 	uint8_t subCallNo;
 #endif
 } BAX_env;	// Running environment for the interpreted program
+
+enum {
+	BAX_CONDITION_NSET,
+	BAX_CONDITION_MET,
+	BAX_CONDITION_FAILED,
+	BAX_CONDITION_FAILED_NEW,
+	BAX_CONDITION_MET_OLD,
+	BAX_CONDITION_FAILED_OLD,
+};
 
 typedef enum {
 	// Nothing
@@ -73,6 +83,7 @@ typedef enum {
 	BAX_CMD_RD,
 	BAX_CMD_REQ,
 	BAX_CMD_RTN,
+	BAX_CMD_SLP,
 	BAX_CMD_SUB,
 	BAX_CMD_TON,
 	BAX_CMD_TOS,
@@ -160,6 +171,7 @@ typedef enum {
 	BAX_SRC_DEC_CONST,
 	BAX_SRC_CHAR_CONST,
 	BAX_SRC_COMMENT,
+	BAX_SRC_LABEL,
 
 	// Symbols
 	BAX_SRC_LPAR = 220,
