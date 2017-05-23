@@ -1,0 +1,17 @@
+# BAX sample program,
+# calculates the fibonacci
+#
+prt "Fibonacci:"
+let a = 1
+let b = 1
+let c = 0
+
+prt a
+:loop
+
+let c = a
+let a = a + b 
+let b = c
+prt a
+if a<20000 && b<12000  #avoid overflow
+jmp :loop
